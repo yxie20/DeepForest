@@ -55,7 +55,7 @@ conda install deepforest albumentations -c conda-forge
 Depending on the GPU you will need with `cudatoolkit=10.2` or `cudatoolkit=11.3`:
 
 ```
-conda create -n deepforest python=3 pytorch torchvision cudatoolkit=10.2 -c pytorch
+conda create -n deepforest python=3 pytorch torchvision cudatoolkit=11.3 -c pytorch -y
 conda activate deepforest
 conda install deepforest albumentations -c conda-forge
 ```
