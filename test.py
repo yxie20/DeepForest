@@ -67,7 +67,10 @@ if __name__ == "__main__":
     model = main.deepforest()
     model.use_release()
     tone_map_params = tif_util.find_percent_clip_params(dataset)
-    bbox, patches, img = export_bbox_tif(dataset, model, (3000,3500,3000,3500), tone_map_params, debug=True, return_plot=True)
+    bbox, patches, img = export_bbox_tif(
+        dataset, model, (3000,3500,3000,3500), tone_map_params, 
+        # debug=True, return_plot=True
+    )
 
 
 
