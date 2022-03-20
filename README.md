@@ -6,6 +6,9 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2538143.svg)](https://doi.org/10.5281/zenodo.2538143)
 
 
+### From Yiheng
+`run.py` contains the highest level function for running deepforest with our own tiff data.
+
 ### Conda-forge build status
 
 | Name | Downloads | Version | Platforms |
