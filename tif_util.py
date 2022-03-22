@@ -16,10 +16,10 @@ def resize(dataset, img, pixelsize=0.25):
     w_scale = pixelsize / abs(transform[1])    # todo: check if this is h or w
     h_scale = pixelsize / abs(transform[5])
     h, w = img.shape[:2]
-    dsize = round(h * h_scale), round(w * w_scale)
+    dsize = round(w * w_scale), round(h * h_scale)
     ret_img = cv2.resize(img, dsize)
 
-    return ret_img
+    return ret_img, (h_scale, w_scale)
 
 
 def find_percent_clip_params(dataset, t_min=10, t_max=90, patchsize=128, patches=16):
@@ -111,7 +111,7 @@ def ms2rgb(dataset, regions, out_filename=None, save_intermediate=False):
             clip=(0, 255),
             scaler=255,
         )
-        patch = resize(dataset, patch)
+        patch, _ = resize(dataset, patch)
 
         for i in range(3):
             outdata.GetRasterBand(i+1).WriteArray(patch[i].astype(np.float32), reg[0], reg[2])

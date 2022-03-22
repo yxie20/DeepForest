@@ -35,28 +35,39 @@ def export_bbox_tif(dataset, model, region, tone_map_params, return_patches=True
     patch = tif_util.read_patch(
         dataset, 
         region,
-        bands=[4, 2, 1],        # Input is in RGB format
+        # bands=[4, 2, 1],        # Input is in RGB format
         # bands=[1, 2, 4],        # Input is in RGB format
         tone_map='percent_clip', 
         tone_map_params=tone_map_params,
         clip=(0, 255),
         scaler=255,
     )
-    patch = tif_util.resize(dataset, patch, pixelsize=0.25)
-    patch = patch.astype(np.float32)
+    # Collapse 8 channels (MS) into 3 (RGB)
+    patch_rgb = np.dstack((patch[...,1], patch[...,2], patch[...,4]))
+    # Resize so that each pixel in our dataset corresponds to training data for DeepFroest
+    patch_rgb, scale = tif_util.resize(dataset, patch_rgb, pixelsize=0.25)
+    patch_rgb = patch_rgb.astype(np.float32)
 
     # Assumes image in 0-255
-    df = model.predict_image(image=patch)
+    df = model.predict_image(image=patch_rgb)
+    # Take into account rescaling
+    df['xmin_orig'] = df['xmin'].apply(lambda x: x/scale[1])
+    df['ymin_orig'] = df['ymin'].apply(lambda x: x/scale[0])
+    df['xmax_orig'] = df['xmax'].apply(lambda x: x/scale[1])
+    df['ymax_orig'] = df['ymax'].apply(lambda x: x/scale[0])
+
     patches, img = [], None
     if return_patches:
         for index, row in df.iterrows():
-            patches.append(patch[round(row['ymin']):round(row['ymax']), round(row['xmin']):round(row['xmax'])])
+            patches.append(patch[round(row['ymin_orig']):round(row['ymax_orig']), round(row['xmin_orig']):round(row['xmax_orig'])])
             if debug:
-                cv2.imwrite(f"temp/{index}.png", patches[-1][...,::-1])
+                _img = patch_rgb[round(row['ymin']):round(row['ymax']), round(row['xmin']):round(row['xmax'])]
+                cv2.imwrite(f"temp/{index}.png", _img[...,::-1])
+                cv2.imwrite(f"temp/{index}_origres.png", np.dstack([patches[-1][..., 4], patches[-1][..., 2], patches[-1][..., 1]]))
 
     if return_plot:
         # The returned img is in cv2 BGR format.
-        img = model.predict_image(image=patch, return_plot=True)
+        img = model.predict_image(image=patch_rgb, return_plot=True)
         if debug:
             cv2.imwrite(f"temp/bbox.png", img)
 
@@ -69,7 +80,7 @@ if __name__ == "__main__":
     model.use_release()
     tone_map_params = tif_util.find_percent_clip_params(dataset)
     bbox, patches, img = export_bbox_tif(
-        dataset, model, (15000,16000,15000,16000), tone_map_params, 
+        dataset, model, (15000,15500,15000,16000), tone_map_params, 
         debug=True, return_plot=True
     )
 
