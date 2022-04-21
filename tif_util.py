@@ -10,7 +10,9 @@ def gps2pixel(dataset):
 
 def resize(dataset, img, pixelsize=0.25):
     """
-    Args: pixelsize: real world distance (unit: meters) per pixel
+    Args: 
+        pixelsize: real world distance (unit: meters) per pixel
+            The larger the number, the more blurry. Our dataset has pixelsize=0.3.
     """
     transform = dataset.GetGeoTransform()
     w_scale = pixelsize / abs(transform[1])    # todo: check if this is h or w
