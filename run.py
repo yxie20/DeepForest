@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 
-from deepforest import main
+from deepforest import main, get_data
 from osgeo import gdal
 
 import tif_util
@@ -11,7 +11,7 @@ import tif_util
 
 
 def export_bbox_tif(dataset, model, region, tone_map_params, 
-    return_patches=True, return_plot=False, debug=False, resize=False):
+    return_patches=True, return_plot=False, debug=False, resize=False, patch_size=600):
     """
     Example usage:
         dataset = gdal.Open('data/Delivery/Ortho_PS/20OCT10155557-PS-014910772010_01_P001.tif')
@@ -50,7 +50,7 @@ def export_bbox_tif(dataset, model, region, tone_map_params,
     patch_rgb = patch_rgb.astype(np.float32)
 
     # Assumes image in 0-255
-    df = model.predict_tile(image=patch_rgb, patch_size=600)
+    df = model.predict_tile(image=patch_rgb, patch_size=patch_size)
 
     # Take into account rescaling
     df['xmin_orig'] = df['xmin'].apply(lambda x: x/scale[1])
@@ -64,28 +64,39 @@ def export_bbox_tif(dataset, model, region, tone_map_params,
             patches.append(patch[round(row['ymin_orig']):round(row['ymax_orig']), round(row['xmin_orig']):round(row['xmax_orig'])])
             if debug:
                 _img = patch_rgb[round(row['ymin']):round(row['ymax']), round(row['xmin']):round(row['xmax'])]
-                # cv2.imwrite(f"temp/{index}.png", _img[...,::-1])
+                cv2.imwrite(f"temp/{index}.png", _img[...,::-1])
 
-    if return_plot:
+    if return_plot or debug:
         # The returned img is in cv2 BGR format.
-        img = model.predict_tile(image=patch_rgb, return_plot=True, patch_size=600)
+        img = model.predict_tile(image=patch_rgb, return_plot=True, patch_size=patch_size)
         if debug:
             cv2.imwrite(f"temp/bbox.png", img)
+            cv2.imwrite(f"temp/orig.png", patch_rgb[...,::-1])
 
     return df, patches, img
+
+
+def test(m, csv_file):
+
+    csv_file = get_data(csv_file)
+    root_dir = os.path.dirname(csv_file)
+    results = m.evaluate(csv_file, root_dir, iou_threshold = 0.5)
 
 
 if __name__ == "__main__":
     dataset = gdal.Open('data/Delivery/Ortho_PS/20OCT10155557-PS-014910772010_01_P001.tif')
     model = main.deepforest()
     model.use_release()
-    tone_map_params = tif_util.find_percent_clip_params(dataset)
-    bbox, patches, img = export_bbox_tif(
-        dataset, model, (15000,16000,15000,16000), tone_map_params, 
-        debug=True, return_plot=True
-    )
 
+    # Run model inference
+    # tone_map_params = tif_util.find_percent_clip_params(dataset)
+    # bbox, patches, img = export_bbox_tif(
+    #     dataset, model, (15000,16000,15000,16000), tone_map_params, 
+    #     debug=True, return_plot=True
+    # )
 
+    # Run model evaluation
+    test(model, '')
 
 # m = main.deepforest()
 # m.use_release()
