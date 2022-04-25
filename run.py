@@ -10,14 +10,8 @@ import time
 import tif_util
 
 
-
-<<<<<<< HEAD
-
 def export_bbox_tif(dataset, model, region, tone_map_params, 
     return_patches=True, return_plot=False, debug=False, resize=False, patch_size=600):
-=======
-def export_bbox_tif(dataset, model, region, tone_map_params, return_patches=True, return_plot=False, debug=False):
->>>>>>> origin/fine_tuning
     """
     Example usage:
         dataset = gdal.Open('data/Delivery/Ortho_PS/20OCT10155557-PS-014910772010_01_P001.tif')
@@ -54,7 +48,6 @@ def export_bbox_tif(dataset, model, region, tone_map_params, return_patches=True
     if resize: patch_rgb, scale = tif_util.resize(dataset, patch_rgb, pixelsize=0.25)
     else: scale = (1., 1.)
     patch_rgb = patch_rgb.astype(np.float32)
-    save_img(cv2.cvtColor(patch_rgb, cv2.COLOR_RGB2BGR), 0 , 0 , 0 , 0)
 
     # Assumes image in 0-255
     df = model.predict_tile(image=patch_rgb, patch_size=patch_size)
@@ -87,20 +80,13 @@ def get_img(dataset, region, tone_map_params):
         dataset, 
         region,
         # bands=[4, 2, 1],        # Input is in RGB format
-        # bands=[1, 2, 4],        # Input is in RGB format
         tone_map='percent_clip', 
         tone_map_params=tone_map_params,
         clip=(0, 255),
         scaler=255,
     )
-    # Collapse 8 channels (MS) into 3 (RGB)
-    patch_rgb = np.dstack((patch[...,1], patch[...,2], patch[...,4]))
-    # Resize so that each pixel in our dataset corresponds to training data for DeepFroest
-    patch_rgb, scale = tif_util.resize(dataset, patch_rgb, pixelsize=0.25)
     patch_rgb = patch_rgb.astype(np.float32)
-    # patch = tif_util.resize(dataset, patch, pixelsize=0.25)[0]
-    # patch_rgb = patch.astype(np.float32)
-    return cv2.cvtColor(patch_rgb, cv2.COLOR_RGB2BGR)
+    return patch_rgb
 
 
 def save_img(img, hmin, hmax, wmin, wmax):
@@ -108,7 +94,7 @@ def save_img(img, hmin, hmax, wmin, wmax):
     if not os.path.exists(path):
         os.makedirs(path)
     os.chdir(path)
-    cv2.imwrite(f"{hmin}_{hmax}_{wmin}_{wmax}_region.png", img)
+    cv2.imwrite(f"{hmin}_{hmax}_{wmin}_{wmax}_region.png", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
     os.chdir("../..")
 
 def saveNImages(n = 10, hRange = 500, wRange = 1000):
@@ -211,19 +197,27 @@ def test(m, csv_file):
     csv_file = get_data(csv_file)
     root_dir = os.path.dirname(csv_file)
     results = m.evaluate(csv_file, root_dir, iou_threshold = 0.5)
+    print(results)
 
 
 if __name__ == "__main__":
-    # dataset = gdal.Open('data/Delivery/Ortho_PS/20OCT10155557-PS-014910772010_01_P001.tif')
+    dataset = gdal.Open('data/Delivery/Ortho_PS/20OCT10155557-PS-014910772010_01_P001.tif')
     model = main.deepforest()
-    # model.use_release()
+    model.use_release()
+
+    # # Run model inference
     # tone_map_params = tif_util.find_percent_clip_params(dataset)
     # bbox, patches, img = export_bbox_tif(
-    #     dataset, model, (15000,15500,15000,16000), tone_map_params, 
-    #     debug=True, return_plot=True
+    #     dataset, model, 
+    #     # (15000,16000,15000,16000), 
+    #     (1000, 2000, 9200, 10200),
+    #     tone_map_params, debug=True, return_plot=True
     # )
 
-    train_model(model, "data/training_data_folder/train.csv", "data/train_data_folder/valid.csv")
+    # Run model evaluation
+    test(model, 'train_data_folder/valid.csv')
+
+    # train_model(model, "data/training_data_folder/train.csv", "data/train_data_folder/valid.csv")
    
 
    
@@ -232,16 +226,6 @@ if __name__ == "__main__":
 # saveNImages(n=5)
 # format_csv()
 # split_data(path='data/annotations_final.csv')
-
-    # Run model inference
-    # tone_map_params = tif_util.find_percent_clip_params(dataset)
-    # bbox, patches, img = export_bbox_tif(
-    #     dataset, model, (15000,16000,15000,16000), tone_map_params, 
-    #     debug=True, return_plot=True
-    # )
-
-    # Run model evaluation
-    test(model, '')
 
 # m = main.deepforest()
 # m.use_release()

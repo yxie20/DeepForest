@@ -103,7 +103,6 @@ def ms2rgb(dataset, regions, out_filename=None, save_intermediate=False):
     
     ind = 0
     for reg in regions:
-
         patch = read_patch(
             dataset, 
             reg,
@@ -123,8 +122,35 @@ def ms2rgb(dataset, regions, out_filename=None, save_intermediate=False):
         ind += 1
 
 
-if __name__ == "__main__":
-    # dataset = gdal.Open('test.tif')
-    dataset = gdal.Open('data/Delivery/Ortho_PS/20OCT10155557-PS-014910772010_01_P001.tif')
+def update_mohammad_png(png_folder, tif_file):
+    """
+    Filename format '1000_1500_1200_2200_region.png'
+    """
+    dataset = gdal.Open(tif_file)
+    tone_map_params = find_percent_clip_params(dataset)
+    files = os.listdir(png_folder)
+    for f in files:
+        f = str(f)
+        if f[-4:].lower() == ".png":
+            coords = f.split("_")[:4]
+            coords = [int(c) for c in coords]
+            print(f, coords)
+            patch = read_patch(
+                dataset, 
+                coords,
+                bands=[4, 2, 1],        # Input is in RGB format
+                tone_map='percent_clip', 
+                tone_map_params=tone_map_params,
+                clip=(0, 255),
+                scaler=255,
+            ).astype(np.float32)
+            cv2.imwrite(os.path.join(png_folder, f), cv2.cvtColor(patch, cv2.COLOR_RGB2BGR))
 
+
+if __name__ == "__main__":
+    tif_file = 'data/Delivery/Ortho_PS/20OCT10155557-PS-014910772010_01_P001.tif'
+
+    # dataset = gdal.Open(tif_file)
     # ms2rgb(dataset, [(0,3500,0,3500)], save_intermediate=True)
+    
+    update_mohammad_png("deepforest/data/train_data_folder", tif_file)
