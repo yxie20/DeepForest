@@ -7,6 +7,9 @@ from osgeo import gdal
 import pandas as pd
 import time
 
+from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
+
 import tif_util
 
 
@@ -64,7 +67,7 @@ def export_bbox_tif(dataset, model, region, tone_map_params,
             patches.append(patch[round(row['ymin_orig']):round(row['ymax_orig']), round(row['xmin_orig']):round(row['xmax_orig'])])
             if debug:
                 _img = patch_rgb[round(row['ymin']):round(row['ymax']), round(row['xmin']):round(row['xmax'])]
-                cv2.imwrite(f"temp/{index}.png", _img[...,::-1])
+                # cv2.imwrite(f"temp/{index}.png", _img[...,::-1])
 
     if return_plot or debug:
         # The returned img is in cv2 BGR format.
@@ -163,31 +166,52 @@ def format_csv():
     new_f.to_csv("data/annotations_final.csv", index=False)
 
 
-def train_model(m, train_file, valid_file):
-    m = main.deepforest()
+def train_model(train_file, valid_file, m=None):
+    from_release = False
+    if m is None:
+        m = main.deepforest()
+        from_release = True
+    save_dir = os.path.join(os.getcwd(),'logdir')
+    try:
+        os.mkdir(save_dir)
+    except FileExistsError:
+        pass
+
+    # results = m.evaluate(valid_file, os.path.dirname(valid_file), iou_threshold = 0.4, savedir= save_dir)
+    # print(results)
+
     m.config['gpus'] = '-1' #move to GPU and use all the GPU resources
     m.config["train"]["csv_file"] = train_file
     m.config["train"]["root_dir"] = os.path.dirname(train_file)
-    #We might want to remove this, as this only keeps high quality boxes. It's there to cut traiing time
+    #We might want to remove this, as this only keeps high quality boxes. It's there to cut training time
     m.config["score_thresh"] = 0.4
     m.config["train"]['epochs'] = 2
+    m.config["train"]['batch_size'] = 1
     m.config["validation"]["csv_file"] = valid_file
     m.config["validation"]["root_dir"] = os.path.dirname(valid_file)
+
     #create a pytorch lighting trainer used to training 
+    # callback = ModelCheckpoint(
+    #     dirpath='ckpt',
+    #     monitor='box_recall', 
+    #     mode="max",
+    #     save_top_k=3,
+    #     filename="box_recall-{epoch:02d}-{box_recall:.2f}"
+    # )
     m.create_trainer()
-    #load the lastest release model 
-    m.use_release()
+    # m.create_trainer(logger=TensorBoardLogger(save_dir='logdir/'), 
+        # callbacks=[callback],
+        # enable_checkpointing=True
+    # )
+    if from_release:
+        m.use_release()
 
     start_time = time.time()
     m.trainer.fit(m)
     print(f"--- Training on GPU: {(time.time() - start_time):.2f} seconds ---")
 
-    save_dir = os.path.join(os.getcwd(),'pred_result')
-    try:
-        os.mkdir(save_dir)
-    except FileExistsError:
-        pass
-    results = m.evaluate(train_file, os.path.dirname(train_file), iou_threshold = 0.4, savedir= save_dir)
+    m.trainer.save_checkpoint()
+    results = m.evaluate(valid_file, os.path.dirname(valid_file), iou_threshold = 0.4, savedir= save_dir)
     print(results)
 
 
@@ -200,24 +224,85 @@ def test(m, csv_file):
     print(results)
 
 
+def reduce_tile_size(csv_path, img_path, tile_size=500):
+    """
+    Make sure the output directories are empty before calling this function.
+    """
+    from deepforest import utilities, preprocess
+    import glob, csv
+    output_path = os.path.join(os.path.dirname(csv_path), f"{os.path.basename(csv_path)[:-4]}_split")
+
+    folder_imgs = glob.glob(os.path.join(img_path, "*.png"))
+    folder_imgs = set([os.path.basename(f) for f in folder_imgs])
+    csv_imgs = set()
+    with open(csv_path) as f:
+        reader = csv.reader(f)
+        for row in reader:
+            csv_imgs.add(row[0])
+    raster_to_open = (folder_imgs & csv_imgs)
+
+    for raster_file in raster_to_open:
+        raster_path = os.path.join(img_path, raster_file)
+        annotations_file = preprocess.split_raster(
+            annotations_file=csv_path,
+            path_to_raster=raster_path,
+            base_dir=output_path,
+            patch_size=tile_size,
+            patch_overlap=0.25
+        )
+    
+    # Combine csv files into one
+    csv_files = glob.glob(os.path.join(output_path, "*.csv"))
+    csv_lines = []
+    for path in csv_files:
+        with open(path) as f:
+            reader = list(csv.reader(f))
+            if csv_lines == []:
+                csv_lines.append(",".join(reader[0]))
+            for i in range(1, len(reader)):
+                csv_lines.append(",".join(reader[i]))
+        os.remove(path)
+    out_csvname = os.path.join(output_path, "labels.csv")
+    if os.path.exists(out_csvname):
+        os.remove(out_csvname)
+        exit(12)
+    with open(out_csvname, "w+") as f:
+        f.write("\n".join(csv_lines))
+    print(len(csv_lines))
+
 if __name__ == "__main__":
-    dataset = gdal.Open('data/Delivery/Ortho_PS/20OCT10155557-PS-014910772010_01_P001.tif')
-    model = main.deepforest()
-    model.use_release()
+    # model = main.deepforest()
+    # model.use_release()
 
     # # Run model inference
+    # dataset = gdal.Open('data/Delivery/Ortho_PS/20OCT10155557-PS-014910772010_01_P001.tif')
     # tone_map_params = tif_util.find_percent_clip_params(dataset)
     # bbox, patches, img = export_bbox_tif(
     #     dataset, model, 
     #     # (15000,16000,15000,16000), 
-    #     (1000, 2000, 9200, 10200),
+    #     # (1000, 2000, 9200, 10200),
+    #     # (20000, 21000, 4200, 5200),
+    #     (1000,2000,10000,11000), 
     #     tone_map_params, debug=True, return_plot=True
     # )
 
-    # Run model evaluation
-    test(model, 'train_data_folder/valid.csv')
+    # # Run model evaluation
+    # test(model, 'train_data_folder/valid.csv')
 
-    # train_model(model, "data/training_data_folder/train.csv", "data/train_data_folder/valid.csv")
+    # Pre-process to reduce data size
+    for csv_file in ["train.csv", "valid.csv"]:
+        basedir = "deepforest/data/train_data_folder/"
+        reduce_tile_size(basedir+csv_file, basedir, tile_size=150)
+
+    # # Fine tune model
+    # train_model("deepforest/data/train_data_folder/train.csv", "deepforest/data/train_data_folder/valid.csv")
+
+    # Use smaller tile size to fit into GPU 
+    train_model(
+        "deepforest/data/train_data_folder/train_split/labels.csv", 
+        "deepforest/data/train_data_folder/valid_split/labels.csv",
+        m=None
+    )
    
 
    
